@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI Jigsaw Puzzle Solver</title>
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <style>
         * {
             margin: 0;
@@ -444,9 +445,13 @@
                 <ul>
                     <li>Upload a reference image (completed puzzle)</li>
                     <li>Take a photo of your puzzle pieces</li>
-                    <li>Let AI help match pieces to positions</li>
+                    <li>AI uses OpenCV contour detection for piece identification</li>
+                    <li>ORB feature matching finds piece positions</li>
                     <li>Get smart suggestions for assembly</li>
                 </ul>
+                <div id="cvStatus" style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 5px; font-size: 12px; display: none;">
+                    ⏳ Loading OpenCV.js for advanced detection...
+                </div>
             </div>
 
             <div class="reference-section">
@@ -603,6 +608,24 @@
         let liveSolveActive = false;
         let overlayOpacity = 0.5;
         let showGrid = true;
+        let cvReady = false;
+
+        // Show loading indicator
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('cvStatus').style.display = 'block';
+        });
+
+        // OpenCV.js ready callback
+        function onOpenCvReady() {
+            cvReady = true;
+            console.log('OpenCV.js is ready!');
+            const cvStatus = document.getElementById('cvStatus');
+            cvStatus.style.background = '#d4edda';
+            cvStatus.innerHTML = '✅ OpenCV.js loaded! Advanced contour detection & ORB matching enabled.';
+            setTimeout(() => {
+                cvStatus.style.display = 'none';
+            }, 3000);
+        }
 
         // Reference image upload
         document.getElementById('uploadReferenceBtn').addEventListener('click', () => {
@@ -784,11 +807,113 @@
         }
 
         function detectPiecesAI(imageData, referenceData) {
+            // Use OpenCV if available, otherwise fall back to simple detection
+            if (cvReady && typeof cv !== 'undefined') {
+                return detectPiecesOpenCV(imageData, referenceData);
+            } else {
+                return detectPiecesSimple(imageData, referenceData);
+            }
+        }
+
+        function detectPiecesOpenCV(imageData, referenceData) {
             const width = imageData.width;
             const height = imageData.height;
-            const data = imageData.data;
+            const pieces = [];
 
-            // Enhanced detection with edge detection
+            try {
+                // Convert image data to OpenCV Mat
+                let src = cv.matFromImageData(imageData);
+                let gray = new cv.Mat();
+                let binary = new cv.Mat();
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+
+                // Convert to grayscale
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+                // Apply Gaussian blur to reduce noise
+                cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
+
+                // Adaptive threshold for better piece detection
+                cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv.THRESH_BINARY_INV, 11, 2);
+
+                // Find contours (piece boundaries)
+                cv.findContours(binary, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                console.log(`OpenCV detected ${contours.size()} contours`);
+
+                // Process each contour as a potential piece
+                for (let i = 0; i < contours.size(); i++) {
+                    const contour = contours.get(i);
+                    const area = cv.contourArea(contour);
+
+                    // Filter out very small contours (noise)
+                    if (area < 1000) continue;
+
+                    // Get bounding rectangle
+                    const rect = cv.boundingRect(contour);
+
+                    // Skip pieces that are too small or too large
+                    if (rect.width < 30 || rect.height < 30 || area > width * height * 0.3) continue;
+
+                    // Extract piece region
+                    const pieceData = processCtx.getImageData(rect.x, rect.y, rect.width, rect.height);
+
+                    const pieceCanvas = document.createElement('canvas');
+                    pieceCanvas.width = rect.width;
+                    pieceCanvas.height = rect.height;
+                    const pieceCtx = pieceCanvas.getContext('2d');
+                    pieceCtx.putImageData(pieceData, 0, 0);
+
+                    const colors = extractDominantColors(pieceData);
+                    const isEdge = detectEdgePiece(pieceData, rect.x, rect.y, width, height, Math.max(rect.width, rect.height));
+
+                    let matchPosition = null;
+                    let matchConfidence = 0;
+
+                    if (referenceData) {
+                        const match = findBestMatchORB(pieceData, referenceData, rect, colors);
+                        matchPosition = match.position;
+                        matchConfidence = match.confidence;
+                    }
+
+                    pieces.push({
+                        id: pieces.length,
+                        x: rect.x,
+                        y: rect.y,
+                        width: rect.width,
+                        height: rect.height,
+                        area: area,
+                        thumbnail: pieceCanvas.toDataURL('image/jpeg', 0.7),
+                        isEdge: isEdge,
+                        colors: colors,
+                        colorGroup: categorizeColor(colors),
+                        matchPosition: matchPosition,
+                        matchConfidence: matchConfidence
+                    });
+                }
+
+                // Clean up
+                src.delete();
+                gray.delete();
+                binary.delete();
+                contours.delete();
+                hierarchy.delete();
+
+                console.log(`Filtered to ${pieces.length} valid pieces`);
+                return pieces;
+
+            } catch (error) {
+                console.error('OpenCV error, falling back to simple detection:', error);
+                return detectPiecesSimple(imageData, referenceData);
+            }
+        }
+
+        function detectPiecesSimple(imageData, referenceData) {
+            // Fallback simple grid-based detection
+            const width = imageData.width;
+            const height = imageData.height;
             const pieces = [];
             const gridSize = 60;
 
@@ -796,7 +921,6 @@
                 for (let x = 0; x < width - gridSize; x += gridSize) {
                     const pieceData = processCtx.getImageData(x, y, gridSize, gridSize);
 
-                    // Check if region has content
                     if (!isEmptyRegion(pieceData)) {
                         const pieceCanvas = document.createElement('canvas');
                         pieceCanvas.width = gridSize;
@@ -887,9 +1011,92 @@
             return { name: 'Mixed', color: '#6c757d' };
         }
 
+        function findBestMatchORB(pieceData, referenceData, rect, colors) {
+            // Use ORB feature matching if OpenCV is available
+            if (cvReady && typeof cv !== 'undefined') {
+                try {
+                    // Convert to OpenCV Mat
+                    let pieceMat = cv.matFromImageData(pieceData);
+                    let pieceGray = new cv.Mat();
+                    cv.cvtColor(pieceMat, pieceGray, cv.COLOR_RGBA2GRAY);
+
+                    let refMat = cv.matFromImageData(referenceData);
+                    let refGray = new cv.Mat();
+                    cv.cvtColor(refMat, refGray, cv.COLOR_RGBA2GRAY);
+
+                    // Use ORB for feature detection (faster than SIFT)
+                    let orb = new cv.ORB(500);
+                    let kp1 = new cv.KeyPointVector();
+                    let kp2 = new cv.KeyPointVector();
+                    let des1 = new cv.Mat();
+                    let des2 = new cv.Mat();
+
+                    orb.detectAndCompute(pieceGray, new cv.Mat(), kp1, des1);
+                    orb.detectAndCompute(refGray, new cv.Mat(), kp2, des2);
+
+                    // Match features using BFMatcher
+                    let bf = new cv.BFMatcher(cv.NORM_HAMMING, true);
+                    let matches = new cv.DMatchVector();
+                    bf.match(des1, des2, matches);
+
+                    // Find best matches and calculate position
+                    let bestMatchCount = 0;
+                    let bestPosition = null;
+
+                    if (matches.size() > 5) {
+                        // Get average position from matched keypoints
+                        let avgX = 0, avgY = 0;
+                        const matchCount = Math.min(matches.size(), 20);
+
+                        for (let i = 0; i < matchCount; i++) {
+                            const match = matches.get(i);
+                            const kp = kp2.get(match.trainIdx);
+                            avgX += kp.pt.x;
+                            avgY += kp.pt.y;
+                        }
+
+                        avgX /= matchCount;
+                        avgY /= matchCount;
+
+                        bestPosition = { x: Math.round(avgX), y: Math.round(avgY) };
+                        bestMatchCount = matches.size();
+                    }
+
+                    // Clean up
+                    pieceMat.delete();
+                    pieceGray.delete();
+                    refMat.delete();
+                    refGray.delete();
+                    kp1.delete();
+                    kp2.delete();
+                    des1.delete();
+                    des2.delete();
+                    matches.delete();
+
+                    // Calculate confidence based on matches and color similarity
+                    const colorConf = colorSimilarity(colors, extractRegionColors(referenceData,
+                        bestPosition ? bestPosition.x : 0,
+                        bestPosition ? bestPosition.y : 0, 50));
+
+                    const featureConf = Math.min(100, (bestMatchCount / 10) * 50);
+                    const totalConf = Math.round((colorConf * 0.4) + (featureConf * 0.6));
+
+                    return {
+                        position: bestPosition,
+                        confidence: totalConf
+                    };
+
+                } catch (error) {
+                    console.error('ORB matching error:', error);
+                    return findBestMatch(pieceData, referenceData, colors);
+                }
+            } else {
+                return findBestMatch(pieceData, referenceData, colors);
+            }
+        }
+
         function findBestMatch(pieceData, referenceData, colors) {
             // Simple matching based on color similarity
-            // In a real AI implementation, this would use feature matching
             const refWidth = referenceData.width;
             const refHeight = referenceData.height;
             const pieceColors = colors;
