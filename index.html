@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jigsaw Puzzle Solver</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            touch-action: pan-y;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 20px;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #video {
+            width: 100%;
+            border-radius: 10px;
+            background: #000;
+            display: none;
+        }
+
+        #canvas, #processCanvas {
+            display: none;
+        }
+
+        #imagePreview {
+            width: 100%;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .camera-container {
+            position: relative;
+            display: none;
+        }
+
+        .camera-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            height: 60%;
+            border: 3px dashed rgba(255,255,255,0.8);
+            border-radius: 10px;
+            pointer-events: none;
+        }
+
+        .camera-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status.active {
+            display: block;
+        }
+
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .pieces-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .piece-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .piece-card img {
+            width: 100%;
+            height: 80px;
+            object-fit: contain;
+            border-radius: 5px;
+            background: white;
+            margin-bottom: 5px;
+        }
+
+        .piece-info {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .instructions {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .instructions h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #667eea;
+        }
+
+        .instructions ul {
+            margin-left: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧩 Jigsaw Puzzle Solver</h1>
+
+        <div class="card">
+            <div class="instructions">
+                <h3>📸 How to use:</h3>
+                <ul>
+                    <li>Take a clear photo of your puzzle pieces</li>
+                    <li>Ensure good lighting and minimal shadows</li>
+                    <li>Keep pieces spread out on a flat surface</li>
+                    <li>Avoid overlapping pieces if possible</li>
+                </ul>
+            </div>
+
+            <button class="btn btn-primary" id="cameraBtn">
+                <span>📷</span>
+                Open Camera
+            </button>
+            <button class="btn btn-secondary" id="uploadBtn">
+                <span>📁</span>
+                Upload Image
+            </button>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <div class="camera-container" id="cameraContainer">
+            <div class="card">
+                <video id="video" autoplay playsinline></video>
+                <div class="camera-overlay"></div>
+                <div class="camera-hint">Position puzzle pieces within the frame</div>
+                <button class="btn btn-primary" id="captureBtn" style="margin-top: 15px;">
+                    <span>📸</span>
+                    Capture Photo
+                </button>
+                <button class="btn btn-secondary" id="cancelBtn">
+                    <span>✖️</span>
+                    Cancel
+                </button>
+            </div>
+        </div>
+
+        <canvas id="canvas"></canvas>
+        <canvas id="processCanvas"></canvas>
+
+        <div class="card" id="previewCard" style="display: none;">
+            <img id="imagePreview" alt="Puzzle preview">
+            <div class="status" id="statusMessage"></div>
+            <button class="btn btn-primary" id="analyzeBtn">
+                <span>🔍</span>
+                Analyze Puzzle
+            </button>
+            <button class="btn btn-secondary" id="retakeBtn">
+                <span>🔄</span>
+                Take Another Photo
+            </button>
+        </div>
+
+        <div class="card" id="resultsCard" style="display: none;">
+            <h2 style="margin-bottom: 15px;">Analysis Results</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-number" id="piecesCount">0</div>
+                    <div class="stat-label">Pieces Detected</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="edgePieces">0</div>
+                    <div class="stat-label">Edge Pieces</div>
+                </div>
+            </div>
+            <div id="piecesContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const processCanvas = document.getElementById('processCanvas');
+        const ctx = canvas.getContext('2d');
+        const processCtx = processCanvas.getContext('2d');
+        const imagePreview = document.getElementById('imagePreview');
+        const cameraContainer = document.getElementById('cameraContainer');
+        const previewCard = document.getElementById('previewCard');
+        const resultsCard = document.getElementById('resultsCard');
+        const statusMessage = document.getElementById('statusMessage');
+        const fileInput = document.getElementById('fileInput');
+
+        let stream = null;
+        let currentImage = null;
+
+        // Camera button
+        document.getElementById('cameraBtn').addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }
+                });
+                video.srcObject = stream;
+                video.style.display = 'block';
+                cameraContainer.style.display = 'block';
+                document.querySelector('.card').style.display = 'none';
+            } catch (err) {
+                alert('Could not access camera. Please check permissions or use "Upload Image" instead.');
+                console.error('Camera error:', err);
+            }
+        });
+
+        // Upload button
+        document.getElementById('uploadBtn').addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // File input handler
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    currentImage = event.target.result;
+                    showPreview(currentImage);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Capture photo
+        document.getElementById('captureBtn').addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            currentImage = canvas.toDataURL('image/jpeg', 0.9);
+            stopCamera();
+            showPreview(currentImage);
+        });
+
+        // Cancel camera
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            stopCamera();
+            document.querySelector('.card').style.display = 'block';
+        });
+
+        // Retake photo
+        document.getElementById('retakeBtn').addEventListener('click', () => {
+            previewCard.style.display = 'none';
+            resultsCard.style.display = 'none';
+            document.querySelector('.card').style.display = 'block';
+        });
+
+        // Analyze button
+        document.getElementById('analyzeBtn').addEventListener('click', analyzePuzzle);
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.style.display = 'none';
+                cameraContainer.style.display = 'none';
+            }
+        }
+
+        function showPreview(imageSrc) {
+            imagePreview.src = imageSrc;
+            imagePreview.style.display = 'block';
+            previewCard.style.display = 'block';
+            resultsCard.style.display = 'none';
+            statusMessage.style.display = 'none';
+        }
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `status active ${type}`;
+        }
+
+        async function analyzePuzzle() {
+            showStatus('Analyzing puzzle pieces...', 'processing');
+            document.getElementById('analyzeBtn').disabled = true;
+
+            // Simulate processing delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            try {
+                // Load image
+                const img = new Image();
+                img.src = currentImage;
+                await new Promise((resolve) => { img.onload = resolve; });
+
+                // Set canvas size
+                processCanvas.width = img.width;
+                processCanvas.height = img.height;
+                processCtx.drawImage(img, 0, 0);
+
+                // Get image data
+                const imageData = processCtx.getImageData(0, 0, processCanvas.width, processCanvas.height);
+
+                // Detect pieces
+                const pieces = detectPieces(imageData);
+
+                // Display results
+                displayResults(pieces);
+
+                showStatus(`Successfully detected ${pieces.length} puzzle pieces!`, 'success');
+                resultsCard.style.display = 'block';
+            } catch (error) {
+                showStatus('Error analyzing puzzle. Please try again.', 'error');
+                console.error('Analysis error:', error);
+            } finally {
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+
+        function detectPieces(imageData) {
+            // This is a simplified piece detection algorithm
+            // In a real implementation, you'd use more sophisticated computer vision
+
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+
+            // Convert to grayscale and apply threshold
+            const threshold = 128;
+            const binary = new Uint8Array(width * height);
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                binary[i / 4] = gray < threshold ? 0 : 255;
+            }
+
+            // Simple blob detection (simplified)
+            const pieces = [];
+            const gridSize = 80; // Divide image into grid
+
+            for (let y = 0; y < height - gridSize; y += gridSize) {
+                for (let x = 0; x < width - gridSize; x += gridSize) {
+                    // Check if this grid cell has enough dark pixels (potential piece)
+                    let darkPixels = 0;
+                    for (let dy = 0; dy < gridSize; dy++) {
+                        for (let dx = 0; dx < gridSize; dx++) {
+                            const idx = (y + dy) * width + (x + dx);
+                            if (binary[idx] === 0) darkPixels++;
+                        }
+                    }
+
+                    // If significant dark area, consider it a piece
+                    if (darkPixels > gridSize * gridSize * 0.3) {
+                        // Extract piece thumbnail
+                        const pieceCanvas = document.createElement('canvas');
+                        pieceCanvas.width = gridSize;
+                        pieceCanvas.height = gridSize;
+                        const pieceCtx = pieceCanvas.getContext('2d');
+
+                        // Copy region from process canvas
+                        const pieceData = processCtx.getImageData(x, y, gridSize, gridSize);
+                        pieceCtx.putImageData(pieceData, 0, 0);
+
+                        // Analyze edges (simplified - check if on image border)
+                        const isEdgePiece = x < gridSize || y < gridSize ||
+                                          x > width - gridSize * 2 || y > height - gridSize * 2;
+
+                        pieces.push({
+                            x, y,
+                            width: gridSize,
+                            height: gridSize,
+                            thumbnail: pieceCanvas.toDataURL('image/jpeg', 0.7),
+                            isEdge: isEdgePiece,
+                            colors: extractDominantColors(pieceData)
+                        });
+                    }
+                }
+            }
+
+            return pieces;
+        }
+
+        function extractDominantColors(imageData) {
+            // Simplified color extraction
+            let r = 0, g = 0, b = 0, count = 0;
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 40) { // Sample every 10th pixel
+                r += data[i];
+                g += data[i + 1];
+                b += data[i + 2];
+                count++;
+            }
+
+            return {
+                r: Math.round(r / count),
+                g: Math.round(g / count),
+                b: Math.round(b / count)
+            };
+        }
+
+        function displayResults(pieces) {
+            document.getElementById('piecesCount').textContent = pieces.length;
+            const edgeCount = pieces.filter(p => p.isEdge).length;
+            document.getElementById('edgePieces').textContent = edgeCount;
+
+            const container = document.getElementById('piecesContainer');
+            container.innerHTML = '<div class="pieces-grid" id="piecesGrid"></div>';
+            const grid = document.getElementById('piecesGrid');
+
+            pieces.forEach((piece, idx) => {
+                const pieceCard = document.createElement('div');
+                pieceCard.className = 'piece-card';
+                pieceCard.innerHTML = `
+                    <img src="${piece.thumbnail}" alt="Piece ${idx + 1}">
+                    <div class="piece-info">
+                        ${piece.isEdge ? '🔲 Edge' : '🧩 Interior'}
+                    </div>
+                `;
+                grid.appendChild(pieceCard);
+            });
+        }
+    </script>
+</body>
+</html>
